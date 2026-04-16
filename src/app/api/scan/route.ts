@@ -56,35 +56,24 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Cultural terms - Optimized with case-insensitive check
-    const culturalFound = CULTURAL.filter(term => 
-      new RegExp(`\\b${term}\\b`, "i").test(text)
-    );
+    //     // Cultural terms - Now with masking
+    const culturalFound: string[] = [];
+    for (const term of CULTURAL) {
+      const termRegex = new RegExp(`\\b${term}\\b`, "gi");
+      if (termRegex.test(text)) {
+        culturalFound.push(term);
+        // This is what actually masks the text in the output
+        sanitized = sanitized.replaceAll(termRegex, "[CULTURAL_TERM_PROTECTED]");
+      }
+    }
 
-    // Health terms
-    const healthFound = HEALTH.filter(term => 
-      new RegExp(`\\b${term}\\b`, "i").test(text)
-    );
-
-    riskScore = Math.min(riskScore, 100);
-    const riskLevel = riskScore >= 60 ? "CRITICAL" : riskScore >= 35 ? "HIGH" : riskScore >= 15 ? "MEDIUM" : "LOW";
-    const isClean = findings.length === 0 && culturalFound.length === 0;
-
-    return NextResponse.json({
-      sanitized,
-      findings,
-      culturalFound,
-      healthFound,
-      riskScore,
-      riskLevel,
-      isClean,
-      totalFindings: findings.reduce((s, f) => s + f.count, 0),
-      criticalCount: findings.filter(f => f.sev === "CRITICAL").length,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (err) {
-    console.error("Scan Error:", err);
-    return NextResponse.json({ error: "Scan error" }, { status: 500 });
-  }
-}
-
+    // Health terms - Now with masking
+    const healthFound: string[] = [];
+    for (const term of HEALTH) {
+      const healthRegex = new RegExp(`\\b${term}\\b`, "gi");
+      if (healthRegex.test(text)) {
+        healthFound.push(term);
+        // This is what actually masks the text in the output
+        sanitized = sanitized.replaceAll(healthRegex, "[HEALTH_DATA_PROTECTED]");
+      }
+    }
