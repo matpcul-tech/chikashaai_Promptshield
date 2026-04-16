@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     // Cultural terms — simple case-insensitive substring match (handles apostrophes + spaces)
     const lower = text.toLowerCase();
 
-const rawCultural = CULTURAL.filter(term => 
+
   
 const culturalFound: Array<{term: string; hash: string; token: string}> = [];
 for (const term of rawCultural) {
