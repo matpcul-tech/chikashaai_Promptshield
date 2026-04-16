@@ -53,7 +53,21 @@ export async function POST(req: NextRequest) {
     }
 
     // Cultural terms — simple case-insensitive substring match (handles apostrophes + spaces)
-    const culturalFound = CULTURAL.filter(term => lower.includes(term.toLowerCase()));
+    const lower = text.toLowerCase();
+
+const rawCultural = CULTURAL.filter(term => 
+  lower.includes(term.toLowerCase())
+);
+
+const culturalFound: Array<{term: string; hash: string; token: string}> = [];
+for (const term of rawCultural) {
+  const enc = new TextEncoder();
+  const buf = await crypto.subtle.digest("SHA-256", enc.encode(term + "CN-SOVEREIGN-SHIELD-2026"));
+  const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,"0")).join("").substring(0,8);
+  const token = `[SOVEREIGN_${hash}]`;
+  culturalFound.push({ term, hash, token });
+  sanitized = sanitized.replace(new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"), "gi"), token);
+}
 
     // Health terms — same approach
     const healthFound = HEALTH.filter(term => lower.includes(term.toLowerCase()));
