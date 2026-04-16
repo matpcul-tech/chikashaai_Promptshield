@@ -37,28 +37,34 @@ export async function POST(req: NextRequest) {
     let sanitized = text;
     let riskScore = 0;
 
-    // PII scan
+    // PII scan - Using the regex directly instead of re-constructing it
     for (const { re, label, sev } of PII) {
-      const matches = [...text.matchAll(new RegExp(re.source, re.flags))];
+      // Use Array.from for better compatibility with the build fix we did earlier
+      const matches = Array.from(text.matchAll(re)); 
+      
       if (matches.length > 0) {
-        const examples = matches.slice(0, 2).map(m => m[0].length > 18 ? m[0].substring(0, 18) + "…" : m[0]);
+        const examples = matches.slice(0, 2).map(m => 
+          m[0].length > 18 ? m[0].substring(0, 18) + "…" : m[0]
+        );
+        
         findings.push({ label, sev, count: matches.length, examples });
-        sanitized = sanitized.replace(new RegExp(re.source, re.flags), `[${label.toUpperCase().replace(/ /g, "_")}_PROTECTED]`);
+        
+        // Use the global regex directly in the replace
+        sanitized = sanitized.replaceAll(re, `[${label.toUpperCase().replace(/ /g, "_")}_PROTECTED]`);
+        
         riskScore += sev === "CRITICAL" ? 35 : sev === "HIGH" ? 20 : 10;
       }
     }
 
-    // Cultural terms
-    const culturalFound: string[] = [];
-    for (const term of CULTURAL) {
-      if (new RegExp(`\\b${term}\\b`, "i").test(text)) culturalFound.push(term);
-    }
+    // Cultural terms - Optimized with case-insensitive check
+    const culturalFound = CULTURAL.filter(term => 
+      new RegExp(`\\b${term}\\b`, "i").test(text)
+    );
 
     // Health terms
-    const healthFound: string[] = [];
-    for (const term of HEALTH) {
-      if (new RegExp(`\\b${term}\\b`, "i").test(text)) healthFound.push(term);
-    }
+    const healthFound = HEALTH.filter(term => 
+      new RegExp(`\\b${term}\\b`, "i").test(text)
+    );
 
     riskScore = Math.min(riskScore, 100);
     const riskLevel = riskScore >= 60 ? "CRITICAL" : riskScore >= 35 ? "HIGH" : riskScore >= 15 ? "MEDIUM" : "LOW";
@@ -76,7 +82,9 @@ export async function POST(req: NextRequest) {
       criticalCount: findings.filter(f => f.sev === "CRITICAL").length,
       timestamp: new Date().toISOString(),
     });
-  } catch {
+  } catch (err) {
+    console.error("Scan Error:", err);
     return NextResponse.json({ error: "Scan error" }, { status: 500 });
   }
 }
+
