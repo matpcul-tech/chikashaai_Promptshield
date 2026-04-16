@@ -56,9 +56,7 @@ export async function POST(req: NextRequest) {
     const lower = text.toLowerCase();
 
 const rawCultural = CULTURAL.filter(term => 
-  lower.includes(term.toLowerCase())
-);
-
+  
 const culturalFound: Array<{term: string; hash: string; token: string}> = [];
 for (const term of rawCultural) {
   const enc = new TextEncoder();
