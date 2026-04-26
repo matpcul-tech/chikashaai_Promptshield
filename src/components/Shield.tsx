@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback } from "react";
+import { useState, useCallback, KeyboardEvent } from "react";
 
 interface Finding { label: string; sev: string; count: number; examples: string[]; }
 interface CulturalTerm { term: string; hash: string; token: string; }
@@ -92,6 +92,7 @@ body{background:#07101f;font-family:'Outfit',sans-serif;color:#eef2f8;min-height
 .scan-footer-l{font-family:'DM Mono',monospace;font-size:9px;color:#7a9bbf}
 .scan-footer-r{font-family:'DM Mono',monospace;font-size:9px;color:#4ade80}
 .loading{text-align:center;padding:20px;font-family:'DM Mono',monospace;font-size:12px;color:#7a9bbf}
+.error-box{margin-top:20px;border-radius:16px;overflow:hidden;border:1px solid rgba(232,82,110,.3);background:rgba(232,82,110,.06)}
 .step{display:flex;gap:16px;padding:18px 0;border-bottom:1px solid rgba(255,255,255,.06)}
 .step:last-child{border-bottom:none}
 .step-num{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#00d4b8,#8060cc);display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:14px;font-weight:700;color:#07101f;flex-shrink:0}
@@ -127,6 +128,8 @@ body{background:#07101f;font-family:'Outfit',sans-serif;color:#eef2f8;min-height
 .footer-copy{font-family:'DM Mono',monospace;font-size:10px;color:#4a5568}
 `;
 
+const MAX_INPUT_LENGTH = 5000;
+
 const SAMPLES = [
   { label:"Tribal Health Worker", text:"Patient James Colbert, enrollment number: 12847 and DOB is 03/15/1978. Phone is 580-555-0142. He needs a revised insulin protocol. Can you suggest a treatment plan that accounts for his family history of cardiac disease? Yakoke." },
   { label:"HR / Employee", text:"Employee Sarah Watkins, SSN 456-78-9012, email sarah.watkins@chickasawnation.com, started 01/15/2020. Please draft a performance review." },
@@ -141,16 +144,29 @@ function DemoTab(){
   const [text,setText]=useState("");
   const [result,setResult]=useState<ScanResult|null>(null);
   const [loading,setLoading]=useState(false);
+  const [error,setError]=useState<string|null>(null);
 
   const scan=useCallback(async()=>{
     if(!text.trim()||loading)return;
-    setLoading(true);setResult(null);
+    setLoading(true);
+    setResult(null);
+    setError(null);
     try{
       const res=await fetch("/api/scan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text})});
+      if(!res.ok) throw new Error(`Scan failed (${res.status})`);
       setResult(await res.json());
-    }catch{/* ignore */}
-    finally{setLoading(false);}
+    }catch(err){
+      setError(err instanceof Error?err.message:"Scan failed. Please try again.");
+    }finally{
+      setLoading(false);
+    }
   },[text,loading]);
+
+  const handleKeyDown=useCallback((e:KeyboardEvent<HTMLTextAreaElement>)=>{
+    if((e.ctrlKey||e.metaKey)&&e.key==="Enter"){e.preventDefault();scan();}
+  },[scan]);
+
+  const reset=(t?:string)=>{setText(t??"");setResult(null);setError(null);};
 
   return(
     <div className="wrap">
@@ -158,9 +174,17 @@ function DemoTab(){
         <div className="card-title">Live Prompt Shield Demo</div>
         <div className="card-sub">Paste any text — the Shield scans for PII, then cryptographically hashes Chickasaw cultural terms using SHA-256. Nothing reaches commercial AI servers in readable form.</div>
         <div className="lbl">Enter text to protect</div>
-        <textarea className="textarea" placeholder="Type a message or load a sample..." value={text} onChange={e=>{setText(e.target.value);setResult(null);}}/>
+        <textarea
+          className="textarea"
+          placeholder="Type a message or load a sample… (Ctrl+Enter to scan)"
+          value={text}
+          maxLength={MAX_INPUT_LENGTH}
+          aria-label="Text to scan for sensitive data"
+          onChange={e=>{setText(e.target.value);setResult(null);setError(null);}}
+          onKeyDown={handleKeyDown}
+        />
         {result&&(
-          <div className="counters">
+          <div className="counters" role="status" aria-label="Scan summary">
             <div className="counter"><div className="counter-val" style={{color:result.totalFindings>0?"#e8526e":"#4ade80"}}>{result.totalFindings}</div><div className="counter-lbl">Total Findings</div></div>
             <div className="counter"><div className="counter-val" style={{color:result.criticalCount>0?"#e8526e":"#4ade80"}}>{result.criticalCount}</div><div className="counter-lbl">Critical (PII)</div></div>
             <div className="counter"><div className="counter-val" style={{color:result.culturalFound.length>0?"#00d4b8":"#7a9bbf"}}>{result.culturalFound.length}</div><div className="counter-lbl">Cultural Terms</div></div>
@@ -168,16 +192,25 @@ function DemoTab(){
           </div>
         )}
         <div className="btn-row">
-          <button className="btn-primary" onClick={scan} disabled={loading||!text.trim()}>{loading?"Scanning…":"🛡 Scan for Sensitive Data"}</button>
-          {SAMPLES.map((s,i)=><button key={i} className="btn-sec" onClick={()=>{setText(s.text);setResult(null);}}>{s.label}</button>)}
-          {text&&<button className="btn-sec" onClick={()=>{setText("");setResult(null);}}>Clear</button>}
+          <button className="btn-primary" onClick={scan} disabled={loading||!text.trim()} aria-busy={loading}>
+            {loading?"Scanning…":"🛡 Scan for Sensitive Data"}
+          </button>
+          {SAMPLES.map((s,i)=><button key={i} className="btn-sec" onClick={()=>reset(s.text)}>{s.label}</button>)}
+          {text&&<button className="btn-sec" onClick={()=>reset()}>Clear</button>}
         </div>
       </div>
 
-      {loading&&<div className="loading">🛡 Scanning and hashing sovereign terms…</div>}
+      {loading&&<div className="loading" role="status" aria-live="polite">🛡 Scanning and hashing sovereign terms…</div>}
+
+      {error&&(
+        <div className="error-box" role="alert">
+          <div className="result-hdr"><div className="result-title">⚠️ Error</div></div>
+          <div className="result-body"><p style={{fontSize:13,color:"#e8526e"}}>{error}</p></div>
+        </div>
+      )}
 
       {result&&!loading&&(
-        <div className="result">
+        <div className="result" role="region" aria-label="Scan results">
           <div className="result-hdr">
             <div className="result-title">{result.isClean?"✅ Clean — No Sensitive Data Detected":`⚠️ ${result.findings.length} Issue Type${result.findings.length!==1?"s":""} Detected`}</div>
             <div className={rbClass(result.isClean?"OK":result.riskLevel)}>{result.isClean?"CLEAN":result.riskLevel} · {result.riskScore}/100</div>
@@ -193,7 +226,7 @@ function DemoTab(){
               <>
                 {result.findings.map((f,i)=>(
                   <div className="finding" key={i}>
-                    <div className="finding-dot" style={{background:sevColor(f.sev)}}/>
+                    <div className="finding-dot" style={{background:sevColor(f.sev)}} aria-hidden="true"/>
                     <div>
                       <div className="finding-label">{f.label}</div>
                       <div className="finding-meta">{f.count} instance{f.count!==1?"s":""} · Severity: {f.sev}</div>
@@ -202,9 +235,11 @@ function DemoTab(){
                   </div>
                 ))}
                 {result.findings.length>0&&(
-                  <div className="meter-wrap">
+                  <div className="meter-wrap" aria-label={`Risk score: ${result.riskScore} out of 100`}>
                     <div className="meter-row"><span>Risk Score</span><span style={{color:sevColor(result.riskLevel)}}>{result.riskScore}/100 — {result.riskLevel}</span></div>
-                    <div className="meter-bg"><div className="meter-fill" style={{width:`${result.riskScore}%`,background:`linear-gradient(90deg,${sevColor(result.riskLevel)},${sevColor(result.riskLevel)}88)`}}/></div>
+                    <div className="meter-bg" role="progressbar" aria-valuenow={result.riskScore} aria-valuemin={0} aria-valuemax={100}>
+                      <div className="meter-fill" style={{width:`${result.riskScore}%`,background:`linear-gradient(90deg,${sevColor(result.riskLevel)},${sevColor(result.riskLevel)}88)`}}/>
+                    </div>
                   </div>
                 )}
               </>
@@ -216,7 +251,7 @@ function DemoTab(){
                 {result.culturalFound.map((c,i)=>(
                   <div className="zk-row" key={i}>
                     <div className="zk-term">{c.term}</div>
-                    <div className="zk-arrow">→</div>
+                    <div className="zk-arrow" aria-hidden="true">→</div>
                     <div className="zk-token">{c.token}</div>
                   </div>
                 ))}
@@ -257,7 +292,7 @@ function HowTab(){
           {title:"Response Return — Clean",body:"The AI response returns through the Shield. The end user gets a complete useful response. The AI never saw the sensitive data. Sovereignty maintained at every step."},
         ].map((s,i)=>(
           <div className="step" key={i}>
-            <div className="step-num">{i+1}</div>
+            <div className="step-num" aria-hidden="true">{i+1}</div>
             <div><div className="step-title">{s.title}</div><div className="step-body">{s.body}</div></div>
           </div>
         ))}
@@ -289,7 +324,7 @@ function ComplianceTab(){
             {icon:"📊",name:"Audit Trail",status:"Complete timestamped log"},
           ].map((c,i)=>(
             <div className="comp-item" key={i}>
-              <div className="comp-icon">{c.icon}</div>
+              <div className="comp-icon" aria-hidden="true">{c.icon}</div>
               <div><div className="comp-name">{c.name}</div><div className="comp-status">{c.status}</div></div>
             </div>
           ))}
@@ -312,7 +347,7 @@ function PricingTab(){
           {tier:"Most Popular",name:"Shield Pro",amount:"$5,000",period:"/month per organization",featured:true,features:["Unlimited tribal devices","ZK Chickasaw term hashing","Real-time audit dashboard","Priority support + quarterly review","Custom protected terms dictionary","HIPAA documentation package"]},
           {tier:"Enterprise",name:"Shield Sovereign",amount:"Custom",period:"annual contract",featured:false,features:["Multi-tribe deployment","On-premises installation option","CFM integration ready","Dedicated implementation team","Full AILT governance package","White-label for tribal tech resale"]},
         ].map((p,i)=>(
-          <div className={`price-card ${p.featured?"featured":""}`} key={i}>
+          <div className={`price-card${p.featured?" featured":""}`} key={i}>
             <div className="price-tier">{p.tier}</div>
             <div className="price-name">{p.name}</div>
             <div className="price-amount">{p.amount}</div>
@@ -338,22 +373,35 @@ export default function Shield(){
     <>
       <style>{CSS}</style>
       <div className="page">
-        <div className="hero">
-          <div className="hero-badge"><div className="hero-dot"/>ZERO-KNOWLEDGE · SHA-256 · LIVE</div>
+        <header className="hero">
+          <div className="hero-badge"><div className="hero-dot" aria-hidden="true"/>ZERO-KNOWLEDGE · SHA-256 · LIVE</div>
           <h1 className="hero-title">Sovereign<br/><span>Prompt Shield</span></h1>
           <p className="hero-sub">The first AI data protection layer built for tribal governments. PII detection, Chickasaw cultural term hashing via SHA-256, and sovereign audit logging — owned by your Nation.</p>
           <div className="hero-by">Built by <strong>Sovereign Shield Technologies LLC</strong> · Matthew Culwell · Enrolled Chickasaw Citizen</div>
-        </div>
-        <div className="tabs">{TABS.map(t=><button key={t.id} className={`tab ${tab===t.id?"on":""}`} onClick={()=>setTab(t.id)}>{t.label}</button>)}</div>
-        {tab==="demo"&&<DemoTab/>}
-        {tab==="how"&&<HowTab/>}
-        {tab==="compliance"&&<ComplianceTab/>}
-        {tab==="pricing"&&<PricingTab/>}
-        <div className="footer">
+        </header>
+        <nav className="tabs" aria-label="Product sections">
+          {TABS.map(t=>(
+            <button
+              key={t.id}
+              className={`tab${tab===t.id?" on":""}`}
+              onClick={()=>setTab(t.id)}
+              aria-current={tab===t.id?"page":undefined}
+            >
+              {t.label}
+            </button>
+          ))}
+        </nav>
+        <main>
+          {tab==="demo"&&<DemoTab/>}
+          {tab==="how"&&<HowTab/>}
+          {tab==="compliance"&&<ComplianceTab/>}
+          {tab==="pricing"&&<PricingTab/>}
+        </main>
+        <footer className="footer">
           <div className="footer-name">Sovereign <span>Shield</span> Technologies LLC</div>
           <div className="footer-sub">Protecting Tribal Data Sovereignty · Project Chikasha AI</div>
           <div className="footer-copy">© 2026 Sovereign Shield Technologies LLC · sovereignhealthcareos.com</div>
-        </div>
+        </footer>
       </div>
     </>
   );
