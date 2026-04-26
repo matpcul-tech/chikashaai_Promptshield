@@ -155,7 +155,7 @@ function DemoTab(){
   return(
     <div className="wrap">
       <div className="card">
-        <div className="card-title">Live Shield Demo</div>
+        <div className="card-title">Live Prompt Shield Demo</div>
         <div className="card-sub">Paste any text — the Shield scans for PII, then cryptographically hashes Chickasaw cultural terms using SHA-256. Nothing reaches commercial AI servers in readable form.</div>
         <div className="lbl">Enter text to protect</div>
         <textarea className="textarea" placeholder="Type a message or load a sample..." value={text} onChange={e=>{setText(e.target.value);setResult(null);}}/>
