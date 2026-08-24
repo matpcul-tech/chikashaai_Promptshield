@@ -206,7 +206,7 @@ function DemoTab(){
         </div>
       </div>
 
-      {loading&&<div className="loading" role="status" aria-live="polite">🛡 Scanning and hashing sovereign terms…</div>}
+      {loading&&<div className="loading" role="status" aria-live="polite">🛡 Scanning and tokenizing sovereign terms…</div>}
 
       {error&&(
         <div className="error-box" role="alert">
@@ -253,7 +253,7 @@ function DemoTab(){
 
             {result.culturalFound.length>0&&(
               <div className="zk-box">
-                <div className="zk-title">🔒 Zero-Knowledge Hash — Chickasaw Sovereign Terms</div>
+                <div className="zk-title">🔒 Tenant-Keyed Tokens · Chickasaw Sovereign Terms</div>
                 {result.culturalFound.map((c,i)=>(
                   <div className="zk-row" key={i}>
                     <div className="zk-term">{c.term}</div>
@@ -274,7 +274,7 @@ function DemoTab(){
             )}
 
             <div className="scan-footer">
-              <div className="scan-footer-l">TRACE FIBER SOVEREIGN · {new Date(result.timestamp).toLocaleTimeString()} · Shield v2.0-ZK</div>
+              <div className="scan-footer-l">TRACE FIBER SOVEREIGN · {new Date(result.timestamp).toLocaleTimeString()} · Shield v2.0</div>
               <div className="scan-footer-r">DATA ON-NATION ✓</div>
             </div>
           </div>
@@ -288,7 +288,7 @@ function HowTab(){
   return(
     <div className="wrap">
       <div className="card">
-        <div className="card-title">Two-Layer Zero-Knowledge Architecture</div>
+        <div className="card-title">Two-Layer Sovereign Tokenization Architecture</div>
         <div className="card-sub">Every AI interaction on tribal devices currently sends unprotected data to commercial servers. The Shield closes that gap on Day 1.</div>
         {[
           {title:"Layer 1 - Sovereign Edge (Tenant-Keyed Tokenization)",body:"Protected cultural terms are replaced with HMAC-SHA-256 tokens keyed by the Nation's own tenant secret, so tokenization happens before the prompt reaches any AI system. 'Pashofa' becomes [SOVEREIGN_2c36ab9f41d0e7b2]. Without the Nation's key, the token cannot be linked back to the original term."},
@@ -323,7 +323,7 @@ function ComplianceTab(){
             {icon:"🏥",name:"HIPAA Adjacent",status:"Health data detected & stripped"},
             {icon:"🛡",name:"CARE Principles",status:"Indigenous data sovereignty enforced"},
             {icon:"⚖️",name:"Tribal Data Sovereignty Act",status:"All data in tribal jurisdiction"},
-            {icon:"🔒",name:"Zero-Knowledge Architecture",status:"Cultural terms never transmitted in plaintext"},
+            {icon:"🔒",name:"Sovereign Term Dictionary",status:"Each Nation controls its own protected terms"},
             {icon:"📋",name:"AILT Governance",status:"Adaptive Inclusive Leadership Theory"},
             {icon:"🌐",name:"NTIA Tribal Broadband",status:"Aligned with Trace Fiber awards"},
             {icon:"🔐",name:"HMAC-SHA-256 Tokenization",status:"Per-tenant keys, no shared secret"},
@@ -350,7 +350,7 @@ function PricingTab(){
       <div className="price-grid">
         {[
           {tier:"Starter",name:"Shield Basic",amount:"$2,000",period:"/month per organization",featured:false,features:["Up to 500 tribal devices","PII detection & stripping","Monthly audit reports","Email support","Standard compliance docs"]},
-          {tier:"Most Popular",name:"Shield Pro",amount:"$5,000",period:"/month per organization",featured:true,features:["Unlimited tribal devices","ZK Chickasaw term hashing","Real-time audit dashboard","Priority support + quarterly review","Custom protected terms dictionary","HIPAA documentation package"]},
+          {tier:"Most Popular",name:"Shield Pro",amount:"$5,000",period:"/month per organization",featured:true,features:["Unlimited tribal devices","Tenant-keyed term tokenization","Real-time audit dashboard","Priority support + quarterly review","Custom protected terms dictionary","HIPAA documentation package"]},
           {tier:"Enterprise",name:"Shield Sovereign",amount:"Custom",period:"annual contract",featured:false,features:["Multi-tribe deployment","On-premises installation option","CFM integration ready","Dedicated implementation team","Full AILT governance package","White-label for tribal tech resale"]},
         ].map((p,i)=>(
           <div className={`price-card${p.featured?" featured":""}`} key={i}>
@@ -380,9 +380,9 @@ export default function Shield(){
       <style>{CSS}</style>
       <div className="page">
         <header className="hero">
-          <div className="hero-badge"><div className="hero-dot" aria-hidden="true"/>ZERO-KNOWLEDGE · SHA-256 · LIVE</div>
+          <div className="hero-badge"><div className="hero-dot" aria-hidden="true"/>TENANT-KEYED · HMAC-SHA-256 · LIVE</div>
           <h1 className="hero-title">Sovereign<br/><span>Prompt Shield</span></h1>
-          <p className="hero-sub">The first AI data protection layer built for tribal governments. PII detection, Chickasaw cultural term hashing via SHA-256, and sovereign audit logging — owned by your Nation.</p>
+          <p className="hero-sub">The first AI data protection layer built for tribal governments. PII detection, tenant-keyed HMAC tokenization of cultural terms, and sovereign audit logging, owned by your Nation.</p>
           <div className="hero-by">Built by <strong>Sovereign Shield Technologies LLC</strong> · Matthew Culwell · Enrolled Chickasaw Citizen</div>
         </header>
         <nav className="tabs" aria-label="Product sections">

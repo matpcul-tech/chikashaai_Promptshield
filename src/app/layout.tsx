@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Sovereign Prompt Shield — Chikasha AI",
-  description: "Zero-Knowledge AI Data Protection for Tribal Governments. Built by Sovereign Shield Technologies LLC.",
+  description: "Tenant-Keyed AI Data Protection for Tribal Governments. Built by Sovereign Shield Technologies LLC.",
 };
 
 export const viewport: Viewport = {
