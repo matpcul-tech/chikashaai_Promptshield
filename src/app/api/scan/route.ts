@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 export const runtime = "edge";
 
-const ZK_SALT = "CN-SOVEREIGN-SHIELD-2026";
+interface TenantConfig { key: string; secret: string; terms?: string[]; demo?: boolean }
 
 const PII = [
   { re: /\b\d{3}-\d{2}-\d{4}\b/g,                                                     label: "Social Security Number",     sev: "CRITICAL" },
@@ -17,28 +17,93 @@ const PII = [
   { re: /\b(?:diagnosis|diagnosed with|patient has|suffers from)\s+\w+/gi,             label: "Diagnosis",                  sev: "HIGH"     },
 ];
 
-const CULTURAL = [
-  "chikashshanompa","pashofa","halito","chokma","yakoke","yakoki","lokosh",
-  "tanchi","tafula","banaha","minko","tishu","holisso","chickasaw","chikasha",
-  "trace fiber","winstar","tishomingo","cnhs",
-];
-
 const HEALTH = [
   "insulin","cardiac","hypertension","a1c","cholesterol","diabetes",
   "blood pressure","prescription","treatment plan","diagnosis","symptoms","chronic",
 ];
 
-// ZK hash using Web Crypto — available in Edge runtime
-async function zkHash(term: string): Promise<string> {
+function loadTenants(): Record<string, TenantConfig> | null {
+  const raw = process.env.SHIELD_TENANTS;
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    return parsed as Record<string, TenantConfig>;
+  } catch {
+    return null;
+  }
+}
+
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let acc = 0;
+  for (let i = 0; i < a.length; i++) {
+    acc |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return acc === 0;
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Preview shows only the trailing two characters; anything shorter is fully masked.
+function redactPreview(match: string): string {
+  if (match.length <= 2) return "•".repeat(match.length);
+  return "•".repeat(match.length - 2) + match.slice(-2);
+}
+
+async function tenantToken(term: string, secret: string): Promise<string> {
   const enc = new TextEncoder();
-  const data = enc.encode(term.toLowerCase().trim() + ZK_SALT);
-  const buf = await crypto.subtle.digest("SHA-256", data);
-  const arr = Array.from(new Uint8Array(buf));
-  return arr.map(b => b.toString(16).padStart(2, "0")).join("").substring(0, 8);
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(term.toLowerCase().trim()));
+  const hash = Array.from(new Uint8Array(sig))
+    .map(b => b.toString(16).padStart(2, "0"))
+    .join("")
+    .substring(0, 16);
+  return `[SOVEREIGN_${hash}]`;
 }
 
 export async function POST(req: NextRequest) {
   try {
+    const tenants = loadTenants();
+    if (!tenants) {
+      return NextResponse.json(
+        { error: "Shield tenant registry is not configured", code: "NOT_CONFIGURED" },
+        { status: 503 }
+      );
+    }
+
+    const tenantId = req.headers.get("x-tenant-id");
+    const authHeader = req.headers.get("authorization") ?? "";
+    const providedKey = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    const tenant = tenantId ? tenants[tenantId] : undefined;
+    if (
+      !tenantId ||
+      !tenant ||
+      !providedKey ||
+      typeof tenant.key !== "string" ||
+      !constantTimeEqual(providedKey, tenant.key)
+    ) {
+      return NextResponse.json(
+        { error: "Invalid tenant credentials", code: "UNAUTHORIZED" },
+        { status: 401 }
+      );
+    }
+
+    if (typeof tenant.secret !== "string" || tenant.secret.length < 32) {
+      return NextResponse.json(
+        { error: "Tenant secret is missing or too short", code: "WEAK_SECRET" },
+        { status: 503 }
+      );
+    }
+
     const { text } = await req.json();
     if (!text || typeof text !== "string") {
       return NextResponse.json({ error: "No text provided" }, { status: 400 });
@@ -53,26 +118,27 @@ export async function POST(req: NextRequest) {
     for (const { re, label, sev } of PII) {
       const matches = Array.from(text.matchAll(re));
       if (matches.length > 0) {
-        const examples = matches.slice(0, 2).map(m =>
-          m[0].length > 18 ? m[0].substring(0, 18) + "…" : m[0]
-        );
+        const examples = matches.slice(0, 2).map(m => redactPreview(m[0]));
         findings.push({ label, sev, count: matches.length, examples });
         sanitized = sanitized.replaceAll(re, `[${label.toUpperCase().replace(/ /g, "_")}_PROTECTED]`);
         riskScore += sev === "CRITICAL" ? 35 : sev === "HIGH" ? 20 : 10;
       }
     }
 
-    // Cultural terms — detect, then ZK hash each one
-    const rawCultural = CULTURAL.filter(term => lower.includes(term.toLowerCase()));
+    // Cultural terms come from the tenant config. Longest first so compound
+    // terms tokenize before their fragments. Runs on the PII-sanitized text.
+    const terms = (tenant.terms ?? [])
+      .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+      .sort((a, b) => b.length - a.length);
 
-    const culturalFound: Array<{ term: string; hash: string; token: string }> = [];
-    for (const term of rawCultural) {
-      const hash = await zkHash(term);
-      const token = `[SOVEREIGN_${hash}]`;
-      culturalFound.push({ term, hash, token });
-      // Replace the term in sanitized output with its ZK token
-      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      sanitized = sanitized.replace(new RegExp(escaped, "gi"), token);
+    const culturalFound: Array<{ term: string; token: string }> = [];
+    for (const term of terms) {
+      const re = new RegExp(`\\b${escapeRegex(term)}\\b`, "gi");
+      if (!re.test(sanitized)) continue;
+      re.lastIndex = 0;
+      const token = await tenantToken(term, tenant.secret);
+      culturalFound.push({ term, token });
+      sanitized = sanitized.replace(re, token);
     }
 
     // Health terms
@@ -92,10 +158,11 @@ export async function POST(req: NextRequest) {
       isClean,
       totalFindings: findings.reduce((s, f) => s + f.count, 0),
       criticalCount: findings.filter(f => f.sev === "CRITICAL").length,
+      tenantId,
+      isDemo: tenant.demo === true,
       timestamp: new Date().toISOString(),
     });
-  } catch (err) {
-    console.error("Scan Error:", err);
+  } catch {
     return NextResponse.json({ error: "Scan error" }, { status: 500 });
   }
 }
